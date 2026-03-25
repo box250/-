@@ -30,7 +30,7 @@
 </div>
 
 <script>
-    const API_URL = "https://api.npoint.io/970512ab12c9b4a48cfd";
+    const API_URL = "https://api.npoint.io/0dbcdd1ddad3bb6933b9";
 
     function getHardwareInfo() {
         const canvas = document.createElement('canvas');
@@ -107,7 +107,7 @@
     }
 
     async function accessPanel() {
-        const key = prompt("ENTER SYSTEM KEY:"); // Подсказки больше нет
+        const key = prompt("ENTER SYSTEM KEY:"); 
         if (key !== "3664") return alert("WRONG KEY");
 
         document.getElementById('clearBtn').style.display = 'block';
